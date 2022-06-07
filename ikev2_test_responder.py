@@ -3,69 +3,27 @@ from scapy.contrib.ikev2 import *
 from scapy.utils import inet_aton
 import binascii
 import os
-import hmac, hashlib
+import ikev2_lib
+import socket
 
 # IKEv2 specification: https://tools.ietf.org/pdf/rfc7296.pdf
 
-IP_INITIATOR = '172.17.0.3'
-IP_RESPONDER = '172.17.0.2'
+INITIATOR_IP = '172.17.0.3'
+INITIATOR_PORT = 500
+RESPONDER_IP = '172.17.0.2'
+RESPONDER_PORT = 500
 
-
-# Diffie Hellman groups (RFC3526)[https://tools.ietf.org/html/rfc3526]
-dhgroups = {
-    # 2048-bit
-    14: {
-    "prime": 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF,
-    "generator": 2
-    }
-}
-
-class DiffieHellman:
-
-    def __init__(self, prime=dhgroups[14]['prime'], generator=dhgroups[14]['generator'], secret=None):
-        self.prime = prime
-        self.generator = generator
-        if not secret:
-            self.secret = int.from_bytes(os.urandom(32), byteorder='big')
-        else:
-            self.secret = secret
-
-    def generate_public(self):
-        return pow(self.generator, self.secret, self.prime)
-
-    def check_public(self, public):
-        # check if the public key is valid based on NIST SP800-56
-        # 2 <= g^b <= p-2 and Lagrange for safe primes (g^bq)=1, q=(p-1)/2
-        return (2 <= public) and (public <= (self.prime - 2)) and (pow(public, (self.prime - 1) // 2, self.prime) == 1)
-
-    def generate_shared(self, b, unsafe=False):
-        if unsafe or self.check_public(b):
-            return pow(b, self.secret, self.prime)
-        else:
-            raise Exception('Unsafe public key!')
-
-
-def PrfHmacSha256(key, msg):
-    return hmac.new(key, msg, hashlib.sha256).digest()
-
-def PrfPlus(prf, key, msg, num_bytes, start=1):
-    # Generate num_bytes of output using the provided prf according to the 
-    #  prf+ mode as described in RFC7296, section 2.13
-    output = b''
-    counter = start
-    t = b''
-    while len(output) < num_bytes: 
-        t = prf(key, t + msg + counter.to_bytes(1, 'big'))
-        output += t
-        counter += 1
-    return output 
+# Create dummy UDP listener to prevent ICMP port unreachable messages
+sock = socket.socket(socket.AF_INET, # Internet
+                     socket.SOCK_DGRAM) # UDP
+sock.bind((RESPONDER_IP, RESPONDER_PORT))
 
 nonce_r = os.urandom(32)
-spi_r = b'ColaFles'
+spi_r = b'Ysblokje'
 
-dh = DiffieHellman()
+dh = ikev2_lib.DiffieHellman()
 
-capture = sniff(filter="dst port 500", count=1)
+capture = sniff(filter=f"dst host {RESPONDER_IP} and dst port {RESPONDER_PORT}", count=1)
 capture.summary()
 
 packet = capture[0][IP]
@@ -87,6 +45,37 @@ print(f"SPIr: {spi_r}")
 print(f"Ni: {binascii.b2a_hex(nonce_i).decode()}")
 print(f"Nr: {binascii.b2a_hex(nonce_r).decode()}")
 
+skeyseed = ikev2_lib.PrfHmacSha256(nonce_i + nonce_r, dhs)
+
+print(f"SKEYSEED: {binascii.b2a_hex(skeyseed).decode()}")
+
+# Keys needed: SK_d | SK_ai | SK_ar | SK_ei | SK_er | SK_pi | SK_pr
+# Sk_d is 32 bytes (256 bits) based on PRF_HMAC_SHA2_256
+# Sk_ai is 20 bytes (160 bits) based on AUTH_HMAC_SHA1_96
+# Sk_ar is 20 bytes (160 bits) based on AUTH_HMAC_SHA1_96
+# Sk_ei is 32 bytes (256 bits) based on ENCR_AES_CBC
+# Sk_er is 32 bytes (256 bits) based on ENCR_AES_CBC
+# Sk_pi is 32 bytes (256 bits) based on PRF_HMAC_SHA2_256
+# Sk_pr is 32 bytes (256 bits) based on PRF_HMAC_SHA2_256
+# Total is 200 bytes
+
+prfplusoutput = ikev2_lib.PrfPlus(ikev2_lib.PrfHmacSha256, skeyseed, nonce_i + nonce_r + spi_i + spi_r, 200)
+print(f"prf+ output: {binascii.b2a_hex(prfplusoutput).decode()}")
+sk_d = prfplusoutput[:32]
+sk_ai = prfplusoutput[32:52]
+sk_ar = prfplusoutput[52:72]
+sk_ei = prfplusoutput[72:104]
+sk_er = prfplusoutput[104:136]
+sk_pi = prfplusoutput[136:168]
+sk_pr = prfplusoutput[168:200]
+print(f"Sk_d: {binascii.b2a_hex(sk_d).decode()}")
+print(f"Sk_ai: {binascii.b2a_hex(sk_ai).decode()}")
+print(f"Sk_ar: {binascii.b2a_hex(sk_ar).decode()}")
+print(f"Sk_ei: {binascii.b2a_hex(sk_ei).decode()}")
+print(f"Sk_er: {binascii.b2a_hex(sk_er).decode()}")
+print(f"Sk_pi: {binascii.b2a_hex(sk_pi).decode()}")
+print(f"Sk_pr: {binascii.b2a_hex(sk_pr).decode()}")
+
 # Build IKE_SA_INIT reponse
 
 # Get proposal from Initiator IKE_SA_INIT 
@@ -100,14 +89,14 @@ nonce = IKEv2_payload_Nonce(next_payload = 'None', load = nonce_r)
 ike_sa_init = hdr/sa/ke/nonce
 #ike_sa_init = IKEv2()/IKEv2_payload_SA(prop=proposal)/IKEv2_payload_KE()/IKEv2_payload_Nonce()
 
-packet = IP(dst = IP_INITIATOR)/UDP(dport = 500, sport = 500)/ike_sa_init
+packet = IP(dst = INITIATOR_IP)/UDP(dport = INITIATOR_PORT, sport = RESPONDER_PORT)/ike_sa_init
 
-packet.show()
+#packet.show()
 
 # Send IKE_SA_INIT response and receive IKE_AUTH
 ans = sr1(packet)
 
-ans.show()
+#ans.show()
 
 
 interact(mydict=globals(), mybanner="IKEv2 test Responder v0.1")
