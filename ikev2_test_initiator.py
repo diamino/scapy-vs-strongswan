@@ -68,6 +68,19 @@ dh = DiffieHellman()
 ke_load = dh.generate_public().to_bytes(length=256, byteorder='big')
 #ke_load = binascii.a2b_hex('5c194e0a09a34888806a038640e285046eba3bc9b4ae3d31a5a6811e07aa973c9ed795dcb68380071f05091bf7b3dbf7e76919d903e6f044d4720852f3c8486142fd92947bb5619dd200d287b7a74503ff7de6cba80e893c330e386e81b579ea8252bf7015021fe047283387cd2f0ed61e0e1fc3e011ca845eab3cd859d80a98937f24f23502464a64fa77f8c1bf12f59716eeb4bc34a317fc8a46160f40b2b3e2b52eac5a398c9062344c5ed4fe798b4c9f0b964ad6deb4f05fc63f7292d6f0a742d5bf3353a7be14bcc0c144e2c511342384191718b2d0cecc692bca30235b1b5661151fd4ce43e55dacee2df5969d6421f08c9712bb731c503321102d735d')
 
+'''
+Initiator                         Responder
+-------------------------------------------------------------------
+HDR, SAi1, KEi, Ni  -->                                                 IKE_SA_INIT
+                                  <--  HDR, SAr1, KEr, Nr, [CERTREQ]
+
+HDR, SK {IDi, [CERT,] [CERTREQ,]                                        IKE_AUTH
+    [IDr,] AUTH, SAi2,
+    TSi, TSr}  -->
+                                  <--  HDR, SK {IDr, [CERT,] AUTH,
+                                         SAr2, TSi, TSr}
+'''
+
 # IKEv2 parameters
 # https://www.iana.org/assignments/ikev2-parameters/ikev2-parameters.xhtml
 
@@ -139,11 +152,15 @@ print(f"Sk_er: {binascii.b2a_hex(sk_er).decode()}")
 print(f"Sk_pi: {binascii.b2a_hex(sk_pi).decode()}")
 print(f"Sk_pr: {binascii.b2a_hex(sk_pr).decode()}")
 
+idi_prime = inet_aton(IP_INITIATOR)
+
 # Prepare IKE_AUTH
 hdr = IKEv2(init_SPI = spi_i, resp_SPI = spi_r, next_payload = 'Encrypted', exch_type = 'IKE_AUTH', flags='Initiator')
 sk = IKEv2_payload_Encrypted(next_payload = 'IDi') # TODO
-idi = IKEv2_payload_IDi(next_payload = 'AUTH', IDtype = "IPv4_addr", load=inet_aton(IP_INITIATOR))
+idi = IKEv2_payload_IDi(next_payload = 'AUTH', IDtype = "IPv4_addr", load=idi_prime)
 auth = IKEv2_payload_AUTH(next_payload = 'SA', auth_type = "Shared Key Message Integrity Code", load="xxxxxxx")
+# Auth payload = MAC(ike_sa_init | none_r | prf(Sk_pi, idi_prime'))
+
 
 # Encryption transform ID 12 = ENCR_AES_CBC
 transforms2 = IKEv2_payload_Transform(next_payload = 'last', transform_type = 'Encryption', transform_id = 12, length = 12, key_length = 0x0100)
