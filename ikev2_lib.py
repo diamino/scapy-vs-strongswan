@@ -70,9 +70,12 @@ def PrfPlus(prf, key, msg, num_bytes, start=1):
         counter += 1
     return output 
 
-def verify_integrity(key, msg, checksum, integrity_algo_id=2):
+def calculate_integrity(key, msg, integrity_algo_id=2):
     integrity_algo = integrity[integrity_algo_id]
-    return checksum == hmac.new(key, msg, integrity_algo["hash_algo"]).digest()[:integrity_algo["hash_size"]]
+    return hmac.new(key, msg, integrity_algo["hash_algo"]).digest()[:integrity_algo["hash_size"]]
+
+def verify_integrity(key, msg, checksum, integrity_algo_id=2):
+    return checksum == calculate_integrity(key, msg, integrity_algo_id=integrity_algo_id)
 
 def decrypt_message(key, msg, iv, encryption_algo_id=12):
     plain_padded = AES.new(key, AES.MODE_CBC, iv).decrypt(msg)
