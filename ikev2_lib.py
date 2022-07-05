@@ -78,7 +78,26 @@ def calculate_integrity(key: bytes, msg: bytes, integrity_algo_id: int=2) -> byt
 def verify_integrity(key: bytes, msg: bytes, checksum: bytes, integrity_algo_id: int=2) -> bool:
     return checksum == calculate_integrity(key, msg, integrity_algo_id=integrity_algo_id)
 
+def generate_iv(encryption_algo_id: int=12) -> bytes:
+    return os.urandom(encryption[encryption_algo_id]['block_size'])
+
 def decrypt_message(key: bytes, msg: bytes, iv: bytes, encryption_algo_id: int=12) -> bytes:
+    '''
+    NB. This function currently only supports AES in CBC mode
+    '''
     plain_padded = AES.new(key, AES.MODE_CBC, iv).decrypt(msg)
     pad_length = plain_padded[-1]
     return plain_padded[:-pad_length-1]
+
+def encrypt_message(key: bytes, msg: bytes, iv: bytes, encryption_algo_id: int=12) -> bytes:
+    '''
+    NB. This function currently only supports AES in CBC mode
+    '''
+    cipher_block_size = encryption[encryption_algo_id]['block_size']
+    # Pad message
+    pad_length = cipher_block_size - ((len(msg) + 1) % cipher_block_size)
+    padding = bytes(pad_length)
+    pad_length_b = pad_length.to_bytes(1, byteorder='big')
+    msg_padded = msg + padding + pad_length_b
+    # Encrypt message and return
+    return AES.new(key, AES.MODE_CBC, iv).encrypt(msg_padded)
