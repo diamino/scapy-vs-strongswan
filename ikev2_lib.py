@@ -1,5 +1,6 @@
 import os
 import hmac, hashlib
+from typing import Callable
 from Cryptodome.Cipher import AES
 
 # Diffie Hellman groups (RFC3526)[https://tools.ietf.org/html/rfc3526]
@@ -55,10 +56,10 @@ class DiffieHellman:
             raise Exception('Unsafe public key!')
 
 
-def PrfHmacSha256(key, msg):
+def PrfHmacSha256(key: bytes, msg: bytes) -> bytes:
     return hmac.new(key, msg, hashlib.sha256).digest()
 
-def PrfPlus(prf, key, msg, num_bytes, start=1):
+def PrfPlus(prf: Callable[[bytes, bytes], bytes], key: bytes, msg: bytes, num_bytes: int, start: int=1) -> bytes:
     # Generate num_bytes of output using the provided prf according to the 
     #  prf+ mode as described in RFC7296, section 2.13
     output = b''
@@ -70,14 +71,14 @@ def PrfPlus(prf, key, msg, num_bytes, start=1):
         counter += 1
     return output 
 
-def calculate_integrity(key, msg, integrity_algo_id=2):
+def calculate_integrity(key: bytes, msg: bytes, integrity_algo_id: int=2) -> bytes:
     integrity_algo = integrity[integrity_algo_id]
     return hmac.new(key, msg, integrity_algo["hash_algo"]).digest()[:integrity_algo["hash_size"]]
 
-def verify_integrity(key, msg, checksum, integrity_algo_id=2):
+def verify_integrity(key: bytes, msg: bytes, checksum: bytes, integrity_algo_id: int=2) -> bool:
     return checksum == calculate_integrity(key, msg, integrity_algo_id=integrity_algo_id)
 
-def decrypt_message(key, msg, iv, encryption_algo_id=12):
+def decrypt_message(key: bytes, msg: bytes, iv: bytes, encryption_algo_id: int=12) -> bytes:
     plain_padded = AES.new(key, AES.MODE_CBC, iv).decrypt(msg)
     pad_length = plain_padded[-1]
     return plain_padded[:-pad_length-1]
