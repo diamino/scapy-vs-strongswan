@@ -1,6 +1,7 @@
 import os
 import hmac, hashlib
-from typing import Callable
+import struct
+from typing import Callable, Optional
 from Cryptodome.Cipher import AES
 
 # Diffie Hellman groups (RFC3526)[https://tools.ietf.org/html/rfc3526]
@@ -77,7 +78,7 @@ class DiffieHellman:
         else:
             raise Exception('Unsafe public key!')
 
-def get_prf(prf_algo_id: int) -> Callable[[bytes, bytes], bytes] | None:
+def get_prf(prf_algo_id: int) -> Optional[Callable[[bytes, bytes], bytes]]:
     if prf_algo_id not in prf:
         return None
 
@@ -104,6 +105,12 @@ def PrfPlus(prf: Callable[[bytes, bytes], bytes], key: bytes, msg: bytes, num_by
         output += t
         counter += 1
     return output[:num_bytes] 
+
+def generate_sks(prf: Callable[[bytes, bytes], bytes], skeyseed: bytes, nonceandspi: bytes, psize: int, isize: int, esize: int) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes, bytes]:
+    prfplus_length = (psize * 3) + (isize * 2) + (esize * 2)
+    prfplusoutput = PrfPlus(prf, skeyseed, nonceandspi, prfplus_length)
+    unpack_string = f"{psize}s{isize}s{isize}s{esize}s{esize}s{psize}s{psize}s"
+    return struct.unpack(unpack_string, prfplusoutput)
 
 def calculate_integrity(key: bytes, msg: bytes, integrity_algo_id: int=2) -> bytes:
     integrity_algo = integrity[integrity_algo_id]
