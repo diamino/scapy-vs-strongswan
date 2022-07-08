@@ -40,11 +40,15 @@ encryption = {
 prf = {
     2: {
         "name": "PRF_HMAC_SHA1",
-        "hash_algo": hashlib.sha1
+        "hash_algo": hashlib.sha1,
+        "key_size": 20,
+        "hash_size": 20
     },
     5: {
         "name": "PRF_HMAC_SHA2_256",
-        "hash_algo": hashlib.sha256
+        "hash_algo": hashlib.sha256,
+        "key_size": 32,
+        "hash_size": 32
     }
 
 }
@@ -99,7 +103,7 @@ def PrfPlus(prf: Callable[[bytes, bytes], bytes], key: bytes, msg: bytes, num_by
         t = prf(key, t + msg + counter.to_bytes(1, 'big'))
         output += t
         counter += 1
-    return output 
+    return output[:num_bytes] 
 
 def calculate_integrity(key: bytes, msg: bytes, integrity_algo_id: int=2) -> bytes:
     integrity_algo = integrity[integrity_algo_id]
