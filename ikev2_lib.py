@@ -19,6 +19,12 @@ integrity = {
         "hash_algo": hashlib.sha1,
         "key_size": 20,
         "hash_size": 12
+    },
+    12: {
+        "name": "AUTH_HMAC_SHA2_256_128",
+        "hash_algo": hashlib.sha256,
+        "key_size": 32,
+        "hash_size": 16
     }
 }
 
@@ -29,6 +35,18 @@ encryption = {
         "key_size": 32,
         "block_size": 16
     }
+}
+
+prf = {
+    2: {
+        "name": "PRF_HMAC_SHA1",
+        "hash_algo": hashlib.sha1
+    },
+    5: {
+        "name": "PRF_HMAC_SHA2_256",
+        "hash_algo": hashlib.sha256
+    }
+
 }
 
 class DiffieHellman:
@@ -55,8 +73,20 @@ class DiffieHellman:
         else:
             raise Exception('Unsafe public key!')
 
+def get_prf(prf_algo_id: int) -> Callable[[bytes, bytes], bytes] | None:
+    if prf_algo_id not in prf:
+        return None
+
+    prf_algo = prf[prf_algo_id]
+    def prf_func(key: bytes, msg: bytes) -> bytes:
+        return hmac.new(key, msg, prf_algo["hash_algo"]).digest()
+    return prf_func 
 
 def PrfHmacSha256(key: bytes, msg: bytes) -> bytes:
+    '''
+    This function is kept for backwards compatibility. It is encouraged to use
+      the `get_prf` function in this module.
+    '''
     return hmac.new(key, msg, hashlib.sha256).digest()
 
 def PrfPlus(prf: Callable[[bytes, bytes], bytes], key: bytes, msg: bytes, num_bytes: int, start: int=1) -> bytes:
