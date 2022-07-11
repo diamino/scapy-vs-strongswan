@@ -56,7 +56,7 @@ prf = {
 
 class DiffieHellman:
 
-    def __init__(self, prime=dhgroups[14]['prime'], generator=dhgroups[14]['generator'], secret=None):
+    def __init__(self, prime:int=dhgroups[14]['prime'], generator:int=dhgroups[14]['generator'], secret:Optional[int]=None):
         self.prime = prime
         self.generator = generator
         if not secret:
@@ -64,15 +64,15 @@ class DiffieHellman:
         else:
             self.secret = secret
 
-    def generate_public(self):
+    def generate_public(self) -> int:
         return pow(self.generator, self.secret, self.prime)
 
-    def check_public(self, public):
+    def check_public(self, public: int) -> bool:
         # check if the public key is valid based on NIST SP800-56
         # 2 <= g^b <= p-2 and Lagrange for safe primes (g^bq)=1, q=(p-1)/2
         return (2 <= public) and (public <= (self.prime - 2)) and (pow(public, (self.prime - 1) // 2, self.prime) == 1)
 
-    def generate_shared(self, b, unsafe=False):
+    def generate_shared(self, b: int, unsafe:bool=False) -> int:
         if unsafe or self.check_public(b):
             return pow(b, self.secret, self.prime)
         else:
