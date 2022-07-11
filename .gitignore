@@ -1,6 +1,13 @@
+# Python and Jupyter
 __pycache__/
 .Trash-0/
 .ipynb_checkpoints/
+
+# VSCode settins
+.vscode/
+
+# Generated keys and certificates
 pki/
 
+# Shared secrets for Strongswan
 *.secrets
