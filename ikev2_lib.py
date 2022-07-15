@@ -5,7 +5,7 @@ from typing import Callable, Optional
 from Cryptodome.Cipher import AES
 
 # Diffie Hellman groups (RFC3526)[https://tools.ietf.org/html/rfc3526]
-dhgroups = {
+DHGROUPS = {
     # 2048-bit
     14: {
     "prime": 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF,
@@ -14,7 +14,7 @@ dhgroups = {
 }
 
 # Integrity algorithms [IANA IKEv2 parameters](https://www.iana.org/assignments/ikev2-parameters/ikev2-parameters.xhtml#ikev2-parameters-7)
-integrity = {
+INTEGRITY = {
     2: {
         "name": "AUTH_HMAC_SHA1_96",
         "hash_algo": hashlib.sha1,
@@ -30,7 +30,7 @@ integrity = {
 }
 
 # Encryption algorithms [IANA IKEv2 parameters](https://www.iana.org/assignments/ikev2-parameters/ikev2-parameters.xhtml#ikev2-parameters-5)
-encryption = {
+ENCRYPTION = {
     12: {
         "name": "ENCR_AES_CBC",
         "key_size": 32,
@@ -38,7 +38,7 @@ encryption = {
     }
 }
 
-prf = {
+PRF = {
     2: {
         "name": "PRF_HMAC_SHA1",
         "hash_algo": hashlib.sha1,
@@ -54,9 +54,11 @@ prf = {
 
 }
 
+TRANSFORM_TYPES = {1: "ENCR", 2: "PRF", 3: "INTEG", 4: "D-H", 5: "ESN"}
+
 class DiffieHellman:
 
-    def __init__(self, prime:int=dhgroups[14]['prime'], generator:int=dhgroups[14]['generator'], secret:Optional[int]=None):
+    def __init__(self, prime:int=DHGROUPS[14]['prime'], generator:int=DHGROUPS[14]['generator'], secret:Optional[int]=None):
         self.prime = prime
         self.generator = generator
         if not secret:
@@ -79,10 +81,10 @@ class DiffieHellman:
             raise Exception('Unsafe public key!')
 
 def get_prf(prf_algo_id: int) -> Optional[Callable[[bytes, bytes], bytes]]:
-    if prf_algo_id not in prf:
+    if prf_algo_id not in PRF:
         return None
 
-    prf_algo = prf[prf_algo_id]
+    prf_algo = PRF[prf_algo_id]
     def prf_func(key: bytes, msg: bytes) -> bytes:
         return hmac.new(key, msg, prf_algo["hash_algo"]).digest()
     return prf_func 
@@ -113,14 +115,14 @@ def generate_sks(prf: Callable[[bytes, bytes], bytes], skeyseed: bytes, nonceand
     return struct.unpack(unpack_string, prfplusoutput)
 
 def calculate_integrity(key: bytes, msg: bytes, integrity_algo_id: int=2) -> bytes:
-    integrity_algo = integrity[integrity_algo_id]
+    integrity_algo = INTEGRITY[integrity_algo_id]
     return hmac.new(key, msg, integrity_algo["hash_algo"]).digest()[:integrity_algo["hash_size"]]
 
 def verify_integrity(key: bytes, msg: bytes, checksum: bytes, integrity_algo_id: int=2) -> bool:
     return checksum == calculate_integrity(key, msg, integrity_algo_id=integrity_algo_id)
 
 def generate_iv(encryption_algo_id: int=12) -> bytes:
-    return os.urandom(encryption[encryption_algo_id]['block_size'])
+    return os.urandom(ENCRYPTION[encryption_algo_id]['block_size'])
 
 def decrypt_message(key: bytes, msg: bytes, iv: bytes, encryption_algo_id: int=12) -> bytes:
     '''
@@ -134,7 +136,7 @@ def encrypt_message(key: bytes, msg: bytes, iv: bytes, encryption_algo_id: int=1
     '''
     NB. This function currently only supports AES in CBC mode
     '''
-    cipher_block_size = encryption[encryption_algo_id]['block_size']
+    cipher_block_size = ENCRYPTION[encryption_algo_id]['block_size']
     # Pad message
     pad_length = cipher_block_size - ((len(msg) + 1) % cipher_block_size)
     padding = bytes(pad_length)
